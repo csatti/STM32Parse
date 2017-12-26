@@ -41,7 +41,56 @@ def name_keys(item):
     s = pin['alt']
     if s == '': s = pin['name']
     v = ''.join([ ifill(c) for c in re.split('(\d+)', s)])    
-    return v
+    return pin['unit'] + v
+
+def pin_by_function(row):
+    peri_at_right = ['CAN', 'DAC', 'ETH', 'FSMC', 'I2C', 'I2S', 'SDIO', 'SPI', 'USB', 'USART', 'UART', 'TIM']
+    
+    pin, name, pintype, signal, label = row
+    newpin = collections.defaultdict(str)
+    newpin['pin'] = pin
+    newpin['name'] = name
+    newpin['unit'] = ''
+    newpin['type'] = 'tristate'
+    newpin['side'] = 'left'
+    newpin['alt'] = signal
+    if 'Power' in pintype:
+        newpin['unit'] = 'PWR'
+        newpin['type'] = 'power_in'
+        if 'VSS' in name: newpin['side'] = 'top'
+        elif 'VDD' in name: newpin['side'] = 'bottom'
+    if ('Boot' in pintype) or ('Reset' in pintype):
+        newpin['unit'] = 'SYS'
+        newpin['type'] = 'input'  
+    if 'Input' in pintype:
+        newpin['unit'] = 'GPIO'
+        newpin['type'] = 'input'
+        if label != '': name += '(' + label + ')'
+        newpin['name'] = name
+    if 'Output' in pintype:
+        newpin['unit'] = 'GPIO'
+        newpin['type'] = 'output'
+        newpin['side'] = 'right'
+        if label != '': name += '(' + label + ')'
+        newpin['name'] = name
+    if 'I/O' in pintype:
+        m = peri.match(signal)
+        if m != None:
+            periname = m.group(1)
+            newpin['unit'] = periname
+            newpin['type'] = 'bidirectional'
+            name += '/' + signal
+            if label != '': name += '(' + label + ')'
+            newpin['name'] = name
+            if any(p in periname for p in peri_at_right):
+                newpin['side'] = 'right'
+        else:
+            newpin['unit'] = 'unused'
+            newpin['type'] = 'noconnect'
+            
+    return newpin
+
+
 
 # Default values
 inputname = 'input.csv'
@@ -64,41 +113,7 @@ with open(inputname, 'rb') as csvfile:
     pinreader = csv.reader(csvfile, delimiter=',', quotechar='"')
     next(pinreader, None)
     for row in pinreader:
-        newpin = collections.defaultdict(str)
-        pin, name, pintype, signal, label = row
-        newpin['pin'] = pin
-        newpin['name'] = name
-        newpin['unit'] = ''
-        newpin['type'] = 'tristate'
-        newpin['side'] = 'left'
-        newpin['alt'] = signal
-        if 'Power' in pintype:
-            newpin['unit'] = 'PWR'
-            newpin['type'] = 'power_in'
-            if 'VSS' in name: newpin['side'] = 'top'
-            elif 'VDD' in name: newpin['side'] = 'bottom'
-        if ('Boot' in pintype) or ('Reset' in pintype):
-            newpin['unit'] = 'SYS'
-            newpin['type'] = 'input'  
-        if 'Input' in pintype:
-            newpin['unit'] = 'GPIO'
-            newpin['type'] = 'input'
-            newpin['name'] = name + '/' + label
-        if 'Output' in pintype:
-            newpin['unit'] = 'GPIO'
-            newpin['type'] = 'output'
-            newpin['name'] = name + '/' + label
-        if 'I/O' in pintype:
-            if signal == '':
-                newpin['unit'] = 'unused'
-                newpin['type'] = 'noconnect'
-            else:
-                m = peri.match(signal)
-                if m.group(1) != None:
-                    newpin['unit'] = m.group(1)
-                    newpin['type'] = 'bidirectional'
-                    newpin['name'] = name + '/' + signal
-        pins[i] = newpin
+        pins[i] = pin_by_function(row)
         i += 1
 
 # Generate the output file
