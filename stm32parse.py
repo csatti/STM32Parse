@@ -35,7 +35,8 @@ import collections
 def ifill(text):
     return text.zfill(5) if text.isdigit() else text
 
-# Replaces numbers with zero filled versions inside names for more natural sorting
+# Add leading zeroes to numbers for more natural sorting,
+# use alternative function if available and names otherwise for sorting the pin list
 def name_keys(item):
     pin = item[1]
     s = pin['alt']
@@ -43,10 +44,12 @@ def name_keys(item):
     v = ''.join([ ifill(c) for c in re.split('(\d+)', s)])    
     return pin['unit'] + v
 
+# Generate pin data based on function (maybe add other priorities later?)
 def pin_by_function(row):
+    # These periphery types will have their pins on the right side of their units
     peri_at_right = ['CAN', 'DAC', 'ETH', 'FSMC', 'I2C', 'I2S', 'SDIO', 'SPI', 'USB', 'USART', 'UART', 'TIM']
-    
     pin, name, pintype, signal, label = row
+    # Create a new pin and set its default parameters
     newpin = collections.defaultdict(str)
     newpin['pin'] = pin
     newpin['name'] = name
@@ -54,25 +57,30 @@ def pin_by_function(row):
     newpin['type'] = 'tristate'
     newpin['side'] = 'left'
     newpin['alt'] = signal
+    # Power pin
     if 'Power' in pintype:
         newpin['unit'] = 'PWR'
         newpin['type'] = 'power_in'
         if 'VSS' in name: newpin['side'] = 'top'
         elif 'VDD' in name: newpin['side'] = 'bottom'
+    # Boot pin (add to SYS unit)
     if ('Boot' in pintype) or ('Reset' in pintype):
         newpin['unit'] = 'SYS'
-        newpin['type'] = 'input'  
+        newpin['type'] = 'input'
+    # GPIO manually set by the user as input
     if 'Input' in pintype:
         newpin['unit'] = 'GPIO'
         newpin['type'] = 'input'
         if label != '': name += '(' + label + ')'
         newpin['name'] = name
+    # GPIO manually set by the user as output    
     if 'Output' in pintype:
         newpin['unit'] = 'GPIO'
         newpin['type'] = 'output'
         newpin['side'] = 'right'
         if label != '': name += '(' + label + ')'
         newpin['name'] = name
+    # Pins that are assigned to peripheries or currently unused
     if 'I/O' in pintype:
         m = peri.match(signal)
         if m != None:
@@ -106,9 +114,10 @@ partname = inputname.upper().replace('.CSV','')
 
 # Parse pin file
 pins = {}
-# Pattern for peripheries
+# Pattern for matching peripheries
 peri = re.compile('([A-Z0-9]+)[\w-]+')
 i = 1
+# Open input file as a CSV formatted file (pinout export from STM32CubeMX without alternate functions)
 with open(inputname, 'rb') as csvfile:
     pinreader = csv.reader(csvfile, delimiter=',', quotechar='"')
     next(pinreader, None)
@@ -118,7 +127,7 @@ with open(inputname, 'rb') as csvfile:
 
 # Generate the output file
 print 'Generating '+ outputname + ' file.'
-
+# Write the output file as a CSV formatted file (KiPart format)
 with open(outputname, 'wb') as csvfile:
     partwriter = csv.writer(csvfile, delimiter=',',
                             quotechar='"', quoting=csv.QUOTE_MINIMAL)
